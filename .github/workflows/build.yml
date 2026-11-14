@@ -1,0 +1,38 @@
+name: Build vlguard
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare Vampirism jar
+        run: |
+          set -e
+          V=$(find . -iname 'Vampirism*.jar' | head -1)
+          [ -n "$V" ] || { echo "::error::Загрузите Vampirism-1_20_1-1_10_17.jar в репозиторий"; exit 1; }
+          cp "$V" /tmp/vampirism.jar
+          mkdir -p libs
+          cp /tmp/vampirism.jar libs/Vampirism-1_20_1-1_10_17.jar
+          ls -la libs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.1.1
+      - name: Build
+        run: |
+          set -o pipefail
+          gradle build --no-daemon --stacktrace 2>&1 | tee build.log
+      - name: Show errors
+        if: failure()
+        run: |
+          grep -E "error:|What went wrong|Could not|FAILED|Caused by" -A3 build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done || true
+          { echo '```'; tail -60 build.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vlguard-jar
+          path: build/libs/*.jar
